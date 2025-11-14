@@ -1,0 +1,38 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "nima scmuck project backend app logic",
+  "keywords": [
+    "schmuck",
+    "jewelery",
+    "diamond",
+    "bracelet",
+    "cms",
+    "content",
+    "management",
+    "system",
+    "ecommerce"
+  ],
+  "homepage": "https://github.com/Powercoders-Bootcamp/project-25-2-scrum-team-2#readme",
+  "bugs": {
+    "url": "https://github.com/Powercoders-Bootcamp/project-25-2-scrum-team-2/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Powercoders-Bootcamp/project-25-2-scrum-team-2.git"
+  },
+  "license": "MIT",
+  "author": "Sadullah-TANRIKULU",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "test": "jest",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  }
+}
