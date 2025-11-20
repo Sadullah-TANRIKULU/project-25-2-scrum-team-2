@@ -23,6 +23,8 @@ app.get("/admin/products", async (req, res) => {
     if (material) queryParams.push(`materials=${encodeURIComponent(material)}`);
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
 
+    console.log(queryParams);
+
     const allProductsResp = await axios.get(`${API_BASE_URL}${queryString}`);
     const allProducts = allProductsResp.data;
 
