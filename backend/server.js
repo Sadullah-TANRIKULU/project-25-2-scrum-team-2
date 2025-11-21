@@ -16,14 +16,30 @@ app.get("/admin/products", async (req, res) => {
     const limit = parseInt(req.query.limit) || 5;
     const category = req.query.category;
     const material = req.query.materials;
+    const stone = req.query.stone;
+    const type = req.query.typeOfMessage;
+    const name = req.query.name;
+    const featured = req.query.featured;
+
+    const sortBy = req.query.sortBy;
+    const order = req.query.order || "asc";
 
     // Build URL for fetching all filtered items (to get total count and slicing)
     let queryParams = [];
     if (category) queryParams.push(`category=${encodeURIComponent(category)}`);
     if (material) queryParams.push(`materials=${encodeURIComponent(material)}`);
-    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    if (stone) queryParams.push(`stone=${encodeURIComponent(stone)}`);
+    if (type) queryParams.push(`typeOfMessage=${encodeURIComponent(type)}`);
+    if (name) queryParams.push(`name=${encodeURIComponent(name)}`);
+    if (featured) queryParams.push(`featured=${encodeURIComponent(featured)}`);
 
-    console.log(queryParams);
+    if (sortBy) {
+      queryParams.push(`sortBy=${encodeURIComponent(sortBy)}`);
+      queryParams.push(`order=${encodeURIComponent(order)}`);
+    }
+
+    const queryString =
+      queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
 
     const allProductsResp = await axios.get(`${API_BASE_URL}${queryString}`);
     const allProducts = allProductsResp.data;
