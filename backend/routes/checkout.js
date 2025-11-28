@@ -7,8 +7,8 @@ router.post("/create-session", express.json(), async (req, res) => {
   try {
     const {
       line_items,
-      success_url = "http://localhost:3000/success",
-      cancel_url = "http://localhost:3000/checkout-test.html",
+      success_url = "https://project-25-2-scrum-team-2.onrender.com/success",
+      cancel_url = "https://project-25-2-scrum-team-2.onrender.com/checkout-test.html",
     } = req.body;
     console.log(req.body);
     console.log(line_items);
