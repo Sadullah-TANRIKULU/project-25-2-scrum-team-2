@@ -4,14 +4,13 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
-
 const app = express();
 app.use(cors());
-app.use(express.static('public'));      
+app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 const API_BASE_URL = process.env.API_BASE_URL;
-const checkoutRoutes = require('./routes/checkout');
-app.use('/api/checkout', checkoutRoutes);      
+const checkoutRoutes = require("./routes/checkout");
+app.use("/api/checkout", checkoutRoutes);
 
 app.get("/admin/products", express.json(), async (req, res) => {
   try {
@@ -27,6 +26,8 @@ app.get("/admin/products", express.json(), async (req, res) => {
     const sortBy = req.query.sortBy;
     const order = req.query.order || "asc";
 
+    const availability = req.query.availability;
+
     // Build URL for fetching all filtered items (to get total count and slicing)
     let queryParams = [];
     if (category) queryParams.push(`category=${encodeURIComponent(category)}`);
@@ -35,6 +36,8 @@ app.get("/admin/products", express.json(), async (req, res) => {
     if (type) queryParams.push(`typeOfMessage=${encodeURIComponent(type)}`);
     if (name) queryParams.push(`name=${encodeURIComponent(name)}`);
     if (featured) queryParams.push(`featured=${encodeURIComponent(featured)}`);
+    if (availability)
+      queryParams.push(`availability=${encodeURIComponent(availability)}`);
 
     if (sortBy) {
       queryParams.push(`sortBy=${encodeURIComponent(sortBy)}`);
@@ -47,13 +50,27 @@ app.get("/admin/products", express.json(), async (req, res) => {
     const allProductsResp = await axios.get(`${API_BASE_URL}${queryString}`);
     const allProducts = allProductsResp.data;
 
-    const totalCount = allProducts.length;
+    const enhancedProducts = allProducts.map((product) => {
+      const availability = product.availability || "not available";
+
+      return {
+        ...product,
+        availabilityStatus:
+          availability === "in stock"
+            ? "✅ In Stock"
+            : availability === "on request"
+            ? "⏳ On Request"
+            : "❌ Not Available",
+      };
+    });
+
+    const totalCount = enhancedProducts.length;
     const totalPages = Math.ceil(totalCount / limit);
 
     // Pagination slicing
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const items = allProducts.slice(startIndex, endIndex);
+    const items = enhancedProducts.slice(startIndex, endIndex);
 
     res.json({
       page,
@@ -68,7 +85,7 @@ app.get("/admin/products", express.json(), async (req, res) => {
 });
 
 // Get single product by id
-app.get("/admin/products/:id", express.json(),async (req, res) => {
+app.get("/admin/products/:id", express.json(), async (req, res) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/${req.params.id}`);
     res.json(response.data);
@@ -111,15 +128,15 @@ app.delete("/admin/products/:id", express.json(), async (req, res) => {
 });
 
 // ADD THIS - Stripe Session Verification (right before app.listen)
-app.get('/success', async (req, res) => {
+app.get("/success", async (req, res) => {
   const sessionId = req.query.session_id;
-  
+
   if (sessionId) {
     try {
       // Fetch session details from Stripe
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      
+
       res.send(`
         <!DOCTYPE html>
         <html>
@@ -141,9 +158,15 @@ app.get('/success', async (req, res) => {
             <div class="order-details">
               <h3>Order Details</h3>
               <p><strong>Session ID:</strong> ${session.id}</p>
-              <p><strong>Total:</strong> €${(session.amount_total / 100).toFixed(2)}</p>
+              <p><strong>Total:</strong> €${(
+                session.amount_total / 100
+              ).toFixed(2)}</p>
               <p><strong>Payment Status:</strong> ${session.payment_status}</p>
-              ${session.customer_details?.email ? `<p><strong>Email:</strong> ${session.customer_details.email}</p>` : ''}
+              ${
+                session.customer_details?.email
+                  ? `<p><strong>Email:</strong> ${session.customer_details.email}</p>`
+                  : ""
+              }
             </div>
             
             <p>Order confirmation sent to your email.</p>
@@ -153,14 +176,13 @@ app.get('/success', async (req, res) => {
         </html>
       `);
     } catch (error) {
-      console.error('Stripe session fetch error:', error);
-      res.sendFile(__dirname + '/public/success.html'); // Fallback to static
+      console.error("Stripe session fetch error:", error);
+      res.sendFile(__dirname + "/public/success.html"); // Fallback to static
     }
   } else {
-    res.sendFile(__dirname + '/public/success.html'); // Fallback to static
+    res.sendFile(__dirname + "/public/success.html"); // Fallback to static
   }
 });
-
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
