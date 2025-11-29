@@ -3,6 +3,8 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
 
+const { sendOrderConfirmation, sendAdminNotification } = require("../utils/email.js");  // ✅ Import
+
 router.post("/create-session", express.json(), async (req, res) => {
   try {
     const {
@@ -42,16 +44,14 @@ router.post("/create-session", express.json(), async (req, res) => {
   }
 });
 
-// POST /api/checkout/webhook (Stripe sends events here)
 router.post(
   "/webhook",
   express.raw({
     type: "application/json",
-    verify: (req, res, buf) => {
-      return buf;
-    },
+    verify: (req, res, buf) => buf,
   }),
-  (req, res) => {
+  async (req, res) => {
+    // ✅ Added async
     const sig = req.headers["stripe-signature"];
     let event;
 
@@ -62,11 +62,10 @@ router.post(
         process.env.STRIPE_WEBHOOK_SECRET
       );
     } catch (err) {
-      console.error("Webhook signature verification failed:", err.message);
+      console.error("❌ Webhook signature failed:", err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Handle successful payment
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       console.log(
@@ -76,19 +75,23 @@ router.post(
         "€"
       );
 
-      // TODO: Update your PostgreSQL order as PAID
-      // TODO: Send confirmation email
-      // TODO: Clear Redis cart
+      try {
+        // ✅ Send emails
+        await sendOrderConfirmation(session.customer_details.email, session);
+        await sendAdminNotification(session); // Replace with real admin email
+
+        console.log("📧 Emails sent:", session.id);
+      } catch (emailErr) {
+        console.error("❌ Email failed:", emailErr.message);
+        // Don't fail webhook - payment succeeded anyway
+      }
     }
 
-    // Handle payment failures
     if (event.type === "checkout.session.expired") {
       console.log("❌ Checkout abandoned:", event.data.object.id);
-      // TODO: Cleanup abandoned cart
     }
 
     res.json({ received: true });
   }
 );
-
 module.exports = router;
