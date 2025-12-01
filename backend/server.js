@@ -9,6 +9,10 @@ app.use(cors());
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 const API_BASE_URL = process.env.API_BASE_URL;
+
+const heroRoutes = require("./routes/hero");
+app.use("/", heroRoutes);
+
 const checkoutRoutes = require("./routes/checkout");
 app.use("/api/checkout", checkoutRoutes);
 
@@ -28,7 +32,6 @@ app.get("/admin/products", express.json(), async (req, res) => {
 
     const availability = req.query.availability;
 
-    // Build URL for fetching all filtered items (to get total count and slicing)
     let queryParams = [];
     if (category) queryParams.push(`category=${encodeURIComponent(category)}`);
     if (material) queryParams.push(`materials=${encodeURIComponent(material)}`);
@@ -67,7 +70,6 @@ app.get("/admin/products", express.json(), async (req, res) => {
     const totalCount = enhancedProducts.length;
     const totalPages = Math.ceil(totalCount / limit);
 
-    // Pagination slicing
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const items = enhancedProducts.slice(startIndex, endIndex);
@@ -168,17 +170,17 @@ app.get("/success", async (req, res) => {
             </div>
             
             <p>Order confirmation sent to your email.</p>
-            <button onclick="window.location.href='/checkout-test.html'">🛒 Continue Shopping</button>
+            <button onclick="window.location.href='https://nima-schmuck-test.vercel.app/'">🛒 Continue Shopping</button>
           </div>
         </body>
         </html>
       `);
     } catch (error) {
       console.error("Stripe session fetch error:", error);
-      res.sendFile(__dirname + "/public/success.html"); // Fallback to static
+      res.sendFile(__dirname + "/public/success.html"); 
     }
   } else {
-    res.sendFile(__dirname + "/public/success.html"); // Fallback to static
+    res.sendFile(__dirname + "/public/success.html"); 
   }
 });
 

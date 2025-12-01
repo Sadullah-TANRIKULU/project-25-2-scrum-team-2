@@ -10,7 +10,7 @@ router.post("/create-session", express.json(), async (req, res) => {
     const {
       line_items,
       success_url = "https://project-25-2-scrum-team-2.onrender.com/success",
-      cancel_url = "https://project-25-2-scrum-team-2.onrender.com/checkout-test.html",
+      cancel_url = "https://nima-schmuck-test.vercel.app/",
     } = req.body;
     console.log(req.body);
     console.log(line_items);
