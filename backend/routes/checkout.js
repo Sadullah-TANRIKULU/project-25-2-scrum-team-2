@@ -3,7 +3,7 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
 
-const { sendOrderConfirmation, sendAdminNotification } = require("../utils/email.js");  // ✅ Import
+const { sendOrderConfirmation, sendAdminNotification } = require("../utils/email.js");
 
 router.post("/create-session", express.json(), async (req, res) => {
   try {
@@ -76,14 +76,12 @@ router.post(
       );
 
       try {
-        // ✅ Send emails
         await sendOrderConfirmation(session.customer_details.email, session);
-        await sendAdminNotification(session); // Replace with real admin email
+        await sendAdminNotification(session);
 
         console.log("📧 Emails sent:", session.id);
       } catch (emailErr) {
         console.error("❌ Email failed:", emailErr.message);
-        // Don't fail webhook - payment succeeded anyway
       }
     }
 

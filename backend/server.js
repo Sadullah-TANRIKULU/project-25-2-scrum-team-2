@@ -127,13 +127,11 @@ app.delete("/admin/products/:id", express.json(), async (req, res) => {
   }
 });
 
-// ADD THIS - Stripe Session Verification (right before app.listen)
 app.get("/success", async (req, res) => {
   const sessionId = req.query.session_id;
 
   if (sessionId) {
     try {
-      // Fetch session details from Stripe
       const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 

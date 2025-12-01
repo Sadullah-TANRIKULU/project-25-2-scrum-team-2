@@ -1,5 +1,5 @@
 const nodemailer = require("nodemailer");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // ✅ Add Stripe
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendOrderConfirmation(customerEmail, session) {
-  const total = (session.amount_total / 100).toFixed(2) + " CHF"; // ✅ CHF
+  const total = (session.amount_total / 100).toFixed(2) + " CHF";
 
   await transporter.sendMail({
     from: `"Nima Schmuck" <${process.env.EMAIL_USER}>`,
@@ -35,21 +35,17 @@ async function sendAdminNotification(session) {
     session.id,
     "amount:",
     session.amount_total
-  ); // ✅ DEBUG
+  ); 
 
-  // ✅ SAFETY CHECK - log what we receive
   if (!session || !session.id) {
     console.error("❌ Invalid session object:", session);
     return;
   }
 
   try {
-    // ✅ FETCH FRESH SESSION using ID
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
       expand: ["line_items"],
     });
-
-    console.log("✅ Full session fetched:", fullSession.id); // ✅ DEBUG
 
     const total = (fullSession.amount_total / 100).toFixed(2) + " CHF";
     const items = fullSession.line_items?.data || [];
@@ -89,4 +85,4 @@ async function sendAdminNotification(session) {
   }
 }
 
-module.exports = { sendOrderConfirmation, sendAdminNotification }; // ✅ Export
+module.exports = { sendOrderConfirmation, sendAdminNotification };
