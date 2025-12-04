@@ -3,12 +3,28 @@ const multer = require("multer");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
-const API_BASE_URL = process.env.API_BASE_URL;
+
+// Neon Postgres (add ssl for safety)
+const connectionString = process.env.PG_CONNECTION_STRING;
+const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+
+// Test DB connection on startup
+pool.on("connect", () => {
+  console.log("✅ Connected to Neon Postgres");
+});
+
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on idle client", err);
+});
+
+const imgUploadRoutes = require("./routes/img-upload");
+app.use("/admin/img-upload", imgUploadRoutes);
 
 const heroRoutes = require("./routes/hero");
 app.use("/", heroRoutes);
@@ -16,116 +32,252 @@ app.use("/", heroRoutes);
 const checkoutRoutes = require("./routes/checkout");
 app.use("/api/checkout", checkoutRoutes);
 
+// Get products with pagination, filtering, and sorting
 app.get("/admin/products", express.json(), async (req, res) => {
   try {
+    const client = await pool.connect();
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
+    const offset = (page - 1) * limit;
+
     const category = req.query.category;
     const material = req.query.materials;
     const stone = req.query.stone;
     const type = req.query.typeOfMessage;
     const name = req.query.name;
     const featured = req.query.featured;
-
+    const availability = req.query.availability;
     const sortBy = req.query.sortBy;
     const order = req.query.order || "asc";
 
-    const availability = req.query.availability;
-
+    // Build dynamic WHERE clause
+    let whereClauses = [];
     let queryParams = [];
-    if (category) queryParams.push(`category=${encodeURIComponent(category)}`);
-    if (material) queryParams.push(`materials=${encodeURIComponent(material)}`);
-    if (stone) queryParams.push(`stone=${encodeURIComponent(stone)}`);
-    if (type) queryParams.push(`typeOfMessage=${encodeURIComponent(type)}`);
-    if (name) queryParams.push(`name=${encodeURIComponent(name)}`);
-    if (featured) queryParams.push(`featured=${encodeURIComponent(featured)}`);
-    if (availability)
-      queryParams.push(`availability=${encodeURIComponent(availability)}`);
+    let paramIndex = 1;
 
-    if (sortBy) {
-      queryParams.push(`sortBy=${encodeURIComponent(sortBy)}`);
-      queryParams.push(`order=${encodeURIComponent(order)}`);
+    if (category) {
+      whereClauses.push(`category = $${paramIndex}`);
+      queryParams.push(category);
+      paramIndex++;
+    }
+    if (material) {
+      whereClauses.push(`materials = $${paramIndex}`);
+      queryParams.push(material);
+      paramIndex++;
+    }
+    if (stone) {
+      whereClauses.push(`stone = $${paramIndex}`);
+      queryParams.push(stone);
+      paramIndex++;
+    }
+    if (type) {
+      whereClauses.push(`typeOfMessage = $${paramIndex}`);
+      queryParams.push(type);
+      paramIndex++;
+    }
+    if (name) {
+      whereClauses.push(`name ILIKE $${paramIndex}`);
+      queryParams.push(`%${name}%`);
+      paramIndex++;
+    }
+    if (featured) {
+      whereClauses.push(`featured = $${paramIndex}`);
+      queryParams.push(featured);
+      paramIndex++;
+    }
+    if (availability) {
+      whereClauses.push(`availability = $${paramIndex}`);
+      queryParams.push(availability);
+      paramIndex++;
     }
 
-    const queryString =
-      queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+    const whereClause =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    const allProductsResp = await axios.get(`${API_BASE_URL}${queryString}`);
-    const allProducts = allProductsResp.data;
+    // Default sorting field is 'price'. Update API docs if you change this default.
+    const validSortFields = ["name", "price", "category"];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : "price";
+    const sortOrder = order.toLowerCase() === "desc" ? "DESC" : "ASC";
 
-    const enhancedProducts = allProducts.map((product) => {
-      const availability = product.availability || "not available";
-
-      return {
-        ...product,
-        availabilityStatus:
-          availability === "in stock"
-            ? "✅ In Stock"
-            : availability === "on request"
-            ? "⏳ On Request"
-            : "❌ Not Available",
-      };
-    });
-
-    const totalCount = enhancedProducts.length;
+    // Count total for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM products
+      ${whereClause}
+    `;
+    const countResult = await client.query(countQuery, queryParams);
+    const totalCount = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(totalCount / limit);
 
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const items = enhancedProducts.slice(startIndex, endIndex);
+    // Get paginated products
+    const productsQuery = `
+      SELECT *, 
+        CASE 
+          WHEN availability = 'in stock' THEN '✅ In Stock'
+          WHEN availability = 'on request' THEN '⏳ On Request'
+          ELSE '❌ Not Available'
+        END as availabilityStatus
+      FROM products
+      ${whereClause}
+      ORDER BY ${sortField} ${sortOrder}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    queryParams.push(limit, offset);
+
+    const productsResult = await client.query(productsQuery, queryParams);
+
+    client.release();
 
     res.json({
       page,
       limit,
       totalCount,
       totalPages,
-      items,
+      items: productsResult.rows,
     });
   } catch (error) {
+    console.error("Products query error:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Get single product by id
-app.get("/admin/products/:id", express.json(), async (req, res) => {
+app.get("/admin/products/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await axios.get(`${API_BASE_URL}/${req.params.id}`);
-    res.json(response.data);
+    const result = await client.query("SELECT * FROM products WHERE id = $1", [
+      req.params.id,
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Query error:", error);
+    res.status(500).json({ error: "Database query failed" });
+  } finally {
+    client.release();
   }
 });
 
-// Create new product
+// Create new product - CLEANED UP
 app.post("/admin/products", express.json(), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await axios.post(API_BASE_URL, req.body);
-    res.status(201).json(response.data);
+    const {
+      name,
+      description,
+      price,
+      discount,
+      category,
+      materials,
+      stone,
+      typeOfMessage,
+      message,
+      featured = false, // ✅ Default values
+      availability = "on request",
+    } = req.body;
+
+    // ✅ Input validation for e-commerce essentials
+    if (!name || !price || !category) {
+      return res.status(400).json({
+        error: "Missing required fields: name, price, category",
+      });
+    }
+
+    if (typeof price !== "number" || price <= 0) {
+      return res.status(400).json({
+        error: "Price must be a positive number",
+      });
+    }
+
+    const insertQuery = `
+      INSERT INTO products 
+      (name, description, price, discount, category, materials, stone, typeOfMessage, message, featured, availability)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id, name, price, category  -- ✅ Selective return for performance
+    `;
+
+    const values = [
+      name,
+      description,
+      price,
+      discount,
+      category,
+      materials,
+      stone,
+      typeOfMessage,
+      message,
+      featured,
+      availability,
+    ];
+
+    const result = await client.query(insertQuery, values);
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Insert error:", error);
+
+    res.status(500).json({ error: "Failed to create product" });
+  } finally {
+    client.release();
   }
 });
 
 // Update product by id
 app.put("/admin/products/:id", express.json(), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await axios.put(
-      `${API_BASE_URL}/${req.params.id}`,
-      req.body
-    );
-    res.json(response.data);
+    const { name, description, price, discount, category, materials, stone, typeOfMessage, message, featured, availability } = req.body;
+
+    if (!name || !price || !category) {
+      return res.status(400).json({
+        error: "Missing required fields: name, price, category",
+      });
+    }
+
+    const updateQuery = `
+      UPDATE products
+      SET name = $1, description = $2, price = $3, discount = $4, category = $5, materials = $6, stone = $7, typeOfMessage = $8, message = $9, featured = $10, availability = $11
+      WHERE id = $12
+      RETURNING *
+    `;
+
+    const result = await client.query(updateQuery, [
+      name, description, price, discount, category, materials, stone, typeOfMessage, message, featured, availability, req.params.id
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Update error:", error);
+    res.status(500).json({ error: "Failed to update product" });
+  } finally {
+    client.release();
   }
 });
 
 // Delete product by id
 app.delete("/admin/products/:id", express.json(), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await axios.delete(`${API_BASE_URL}/${req.params.id}`);
-    res.json({ message: "Product deleted", data: response.data });
+    const result = await client.query("DELETE FROM products WHERE id = $1 RETURNING id", [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.json({ message: "Product deleted", data: result.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Delete error:", error);
+    res.status(500).json({ error: "Failed to delete product" });
+  } finally {
+    client.release();
   }
 });
 
@@ -177,10 +329,10 @@ app.get("/success", async (req, res) => {
       `);
     } catch (error) {
       console.error("Stripe session fetch error:", error);
-      res.sendFile(__dirname + "/public/success.html"); 
+      res.sendFile(__dirname + "/public/success.html");
     }
   } else {
-    res.sendFile(__dirname + "/public/success.html"); 
+    res.sendFile(__dirname + "/public/success.html");
   }
 });
 
