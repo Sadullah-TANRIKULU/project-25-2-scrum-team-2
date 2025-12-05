@@ -1,5 +1,4 @@
 require("dotenv").config();
-const multer = require("multer");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -10,7 +9,6 @@ app.use(cors());
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 
-// Neon Postgres (add ssl for safety)
 const connectionString = process.env.PG_CONNECTION_STRING;
 const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
 
@@ -23,6 +21,16 @@ pool.on("error", (err) => {
   console.error("❌ Unexpected error on idle client", err);
 });
 
+const session = require("express-session");
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }, // Set to true if using HTTPS
+  })
+);
+
 const imgUploadRoutes = require("./routes/img-upload");
 app.use("/admin/img-upload", imgUploadRoutes);
 
@@ -32,7 +40,9 @@ app.use("/", heroRoutes);
 const checkoutRoutes = require("./routes/checkout");
 app.use("/api/checkout", checkoutRoutes);
 
-// Get products with pagination, filtering, and sorting
+app.use(express.json()); // For cart/product APIs
+app.use(express.urlencoded({ extended: true }));
+
 app.get("/admin/products", express.json(), async (req, res) => {
   try {
     const client = await pool.connect();
@@ -95,7 +105,6 @@ app.get("/admin/products", express.json(), async (req, res) => {
     const whereClause =
       whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    // Default sorting field is 'price'. Update API docs if you change this default.
     const validSortFields = ["name", "price", "category"];
     const sortField = validSortFields.includes(sortBy) ? sortBy : "price";
     const sortOrder = order.toLowerCase() === "desc" ? "DESC" : "ASC";
@@ -230,7 +239,19 @@ app.post("/admin/products", express.json(), async (req, res) => {
 app.put("/admin/products/:id", express.json(), async (req, res) => {
   const client = await pool.connect();
   try {
-    const { name, description, price, discount, category, materials, stone, typeOfMessage, message, featured, availability } = req.body;
+    const {
+      name,
+      description,
+      price,
+      discount,
+      category,
+      materials,
+      stone,
+      typeOfMessage,
+      message,
+      featured,
+      availability,
+    } = req.body;
 
     if (!name || !price || !category) {
       return res.status(400).json({
@@ -246,7 +267,18 @@ app.put("/admin/products/:id", express.json(), async (req, res) => {
     `;
 
     const result = await client.query(updateQuery, [
-      name, description, price, discount, category, materials, stone, typeOfMessage, message, featured, availability, req.params.id
+      name,
+      description,
+      price,
+      discount,
+      category,
+      materials,
+      stone,
+      typeOfMessage,
+      message,
+      featured,
+      availability,
+      req.params.id,
     ]);
 
     if (result.rows.length === 0) {
@@ -266,7 +298,10 @@ app.put("/admin/products/:id", express.json(), async (req, res) => {
 app.delete("/admin/products/:id", express.json(), async (req, res) => {
   const client = await pool.connect();
   try {
-    const result = await client.query("DELETE FROM products WHERE id = $1 RETURNING id", [req.params.id]);
+    const result = await client.query(
+      "DELETE FROM products WHERE id = $1 RETURNING id",
+      [req.params.id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
@@ -279,6 +314,106 @@ app.delete("/admin/products/:id", express.json(), async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+app.get("/api/cart", (req, res) => {
+  res.json(req.session.cart || []);
+});
+
+app.post("/api/cart/add", async (req, res) => {
+  const { productId, quantity = 1 } = req.body;
+  console.log("productId", productId, "   ", "quantity", quantity);
+  
+
+  try {
+    const client = await pool.connect();
+    const product = await client.query(
+      "SELECT * FROM products WHERE id = $1 AND availability != $2",
+      [productId, "not available"]
+    );
+    client.release();
+
+    if (product.rows.length === 0) {
+      return res.status(404).json({ error: "Product not available" });
+    }
+
+    const item = product.rows[0];
+    req.session.cart = req.session.cart || [];
+
+    // Update or add item
+    const existing = req.session.cart.find((i) => i.id === productId);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      req.session.cart.push({ ...item, quantity });
+    }
+
+    res.json({ cart: req.session.cart });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. POST /api/cart/checkout - Create Stripe session
+app.post("/api/cart/checkout", async (req, res) => {
+  const cart = req.session.cart || [];
+  if (cart.length === 0) return res.status(400).json({ error: "Cart empty" });
+
+  const line_items = cart.map((item) => ({
+    name: item.name,
+    description: item.description || "",
+    price: parseFloat(item.price),
+    images: item.image_url ? [item.image_url] : [],
+    quantity: item.quantity,
+  }));
+
+  try {
+    // SIMPLEST: Direct call to your checkout router's create-session
+    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: line_items.map((item) => ({
+        price_data: {
+          currency: "chf",
+          product_data: {
+            name: item.name,
+            description: item.description,
+            images: item.images,
+          },
+          unit_amount: Math.round(item.price * 100),
+        },
+        quantity: item.quantity,
+      })),
+      success_url: "https://nima-schmuck-test.vercel.app/",
+      cancel_url: "http://localhost:3000/admin/products",
+    });
+
+    req.session.cart = [];
+    res.json({ url: session.url });
+  } catch (error) {
+    res.status(500).json({ error: "Checkout failed" });
+  }
+});
+
+// DELETE item
+app.delete("/api/cart/:productId", (req, res) => {
+  const productId = req.params.productId;
+  req.session.cart =
+    req.session.cart?.filter((item) => item.id != productId) || [];
+  res.json({ cart: req.session.cart });
+});
+
+// UPDATE quantity
+app.put("/api/cart/:productId", (req, res) => {
+  const { quantity } = req.body;
+  if (quantity <= 0) return res.status(400).json({ error: "Invalid quantity" });
+
+  const cart = req.session.cart || [];
+  const itemIndex = cart.findIndex((i) => i.id == req.params.productId);
+  if (itemIndex > -1) cart[itemIndex].quantity = quantity;
+
+  req.session.cart = cart;
+  res.json({ cart });
 });
 
 app.get("/success", async (req, res) => {
