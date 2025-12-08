@@ -48,6 +48,56 @@ router.post("/gallery", uploadFields, async (req, res, next) => {
   }
 });
 
+// POST /heroimg (unchanged, perfect with defaults)
+router.post("/heroimg", upload.array("heroImg", 3), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const heroimg = (req.files || []).map((f) => f.buffer);
+    const query = `
+      INSERT INTO hero (heroimg)
+      VALUES ($1)
+      RETURNING id, array_length(heroimg, 1) as heroimg_count, created_at
+    `;
+    const result = await client.query(query, [heroimg]);
+    res.json({ success: true, hero: result.rows[0] });
+  } catch (error) {
+    console.error(error);
+    if (error.code === "LIMIT_FILE_SIZE")
+      return res.status(400).json({ error: "File >8MB" });
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /heroimg/:id/:idx (fixed)
+router.get("/heroimg/:id/:idx", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id, idx } = req.params;
+    const idxNum = parseInt(idx);
+    if (isNaN(idxNum) || idxNum < 0) {
+      return res.status(400).json({ error: "Invalid idx (0-based)" });
+    }
+    const result = await client.query(
+      `SELECT img FROM (
+        SELECT unnest(heroimg) AS img FROM hero WHERE id = $1
+      ) t OFFSET $2 LIMIT 1`,
+      [id, idxNum]
+    );
+    if (!result.rows[0]?.img) {
+      return res.status(404).json({ error: "No image at index" });
+    }
+    // Dynamic MIME (from first file, or hardcoded)
+    res.set("Content-Type", "image/jpeg").send(result.rows[0].img);
+  } catch (error) {
+    console.error("Heroimg serve error:", error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Bonus: GET products (sizes only)
 router.get("/gallery", async (req, res) => {
   try {

@@ -6,7 +6,7 @@ const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
-app.use(express.static("public"));
+// app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 
 const connectionString = process.env.PG_CONNECTION_STRING;
@@ -61,7 +61,6 @@ app.get("/admin/products", express.json(), async (req, res) => {
     const sortBy = req.query.sortBy;
     const order = req.query.order || "asc";
 
-    // Build dynamic WHERE clause
     let whereClauses = [];
     let queryParams = [];
     let paramIndex = 1;

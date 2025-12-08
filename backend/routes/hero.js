@@ -1,72 +1,118 @@
-// hero.js
+// Updated hero.js - Now uses local PostgreSQL database instead of external API
 const express = require("express");
 const router = express.Router();
-const axios = require("axios");
-
 require("dotenv").config();
+const { Pool } = require("pg");
 
-const API_HERO_URL = process.env.API_HERO_URL;
-const getHeroEndpoint = (id = "") => `${API_HERO_URL}${id ? `/${id}` : ""}`;
+const connectionString = process.env.PG_CONNECTION_STRING;
+const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+
+// Test DB connection on startup
+pool.on("connect", () => {
+  console.log("✅ Connected to Neon Postgres (hero)");
+});
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on idle hero client", err);
+});
 
 // GET /admin/hero - Fetch all heroes
-router.get("/admin/hero", express.json(), async (req, res) => {
+router.get("/admin/hero", async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await axios.get(getHeroEndpoint());
+    const result = await client.query(`
+      SELECT 
+        id, 
+        heroheader, 
+        herotitle1, 
+        herotitle2, 
+        herotitle3, 
+        targeturl, 
+        created_at, 
+        updated_at, 
+        array_length(heroimg, 1) as heroimg_count
+      FROM hero 
+      ORDER BY created_at DESC
+    `);
     res.json({
       success: true,
-      data: response.data,
-      count: response.data.length,
+      data: result.rows,
+      count: result.rows.length,
     });
   } catch (error) {
-    console.error("GET heroes error:", error.response?.data || error.message);
+    console.error("GET heroes error:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to fetch heroes",
-      error: error.response?.data?.message || error.message,
+      error: error.message,
     });
+  } finally {
+    client.release();
   }
 });
 
 // GET /admin/hero/:id - Fetch single hero by ID
-router.get("/admin/hero/:id", express.json(), async (req, res) => {
+router.get("/admin/hero/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    const response = await axios.get(getHeroEndpoint(id));
-    res.json({
-      success: true,
-      data: response.data,
-    });
-  } catch (error) {
-    if (error.response?.status === 404) {
+    const result = await client.query(
+      `
+      SELECT 
+        id, 
+        heroheader, 
+        herotitle1, 
+        herotitle2, 
+        herotitle3, 
+        targeturl, 
+        created_at, 
+        updated_at, 
+        array_length(heroimg, 1) as heroimg_count
+      FROM hero 
+      WHERE id = $1
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Hero not found",
       });
     }
-    console.error("GET hero error:", error.response?.data || error.message);
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error("GET hero error:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to fetch hero",
-      error: error.response?.data?.message || error.message,
+      error: error.message,
     });
+  } finally {
+    client.release();
   }
 });
 
 // POST /admin/hero - Create new hero
 router.post("/admin/hero", express.json(), async (req, res) => {
+  const client = await pool.connect();
   try {
-    const heroData = req.body;
+    const { heroHeader, heroTitle1, heroTitle2, heroTitle3, targetUrl } =
+      req.body;
 
-    // Validate required fields
+    // Validate required fields (heroImg optional)
     const requiredFields = [
-      "heroImg",
       "heroHeader",
       "heroTitle1",
       "heroTitle2",
       "heroTitle3",
       "targetUrl",
     ];
-    const missingFields = requiredFields.filter((field) => !heroData[field]);
+    const missingFields = requiredFields.filter((field) => !req.body[field]);
+    console.log(missingFields);
 
     if (missingFields.length > 0) {
       return res.status(400).json({
@@ -75,82 +121,132 @@ router.post("/admin/hero", express.json(), async (req, res) => {
       });
     }
 
-    // Ensure heroImg is array
-    if (!Array.isArray(heroData.heroImg)) {
-      heroData.heroImg = [heroData.heroImg];
-    }
+    const insertQuery = `
+      INSERT INTO hero (heroheader, herotitle1, herotitle2, herotitle3, targeturl)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, heroheader, herotitle1, herotitle2, herotitle3, targeturl, created_at, array_length(heroimg, 1) as heroimg_count
+    `;
 
-    const response = await axios.post(getHeroEndpoint(), heroData);
+    const values = [heroHeader, heroTitle1, heroTitle2, heroTitle3, targetUrl];
+
+    const result = await client.query(insertQuery, values);
     res.status(201).json({
       success: true,
-      data: response.data,
+      data: result.rows[0],
       message: "Hero created successfully",
     });
   } catch (error) {
-    console.error("POST hero error:", error.response?.data || error.message);
-    res.status(500).json({
+    console.error("POST hero error:", error.message);
+    res.status(400).json({
       success: false,
       message: "Failed to create hero",
-      error: error.response?.data?.message || error.message,
+      error: error.message,
     });
+  } finally {
+    client.release();
   }
 });
 
 // PUT /admin/hero/:id - Update existing hero
 router.put("/admin/hero/:id", express.json(), async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    const heroData = req.body;
+    const { heroHeader, heroTitle1, heroTitle2, heroTitle3, targetUrl } =
+      req.body;
 
-    // Ensure heroImg is array
-    if (!Array.isArray(heroData.heroImg)) {
-      heroData.heroImg = [heroData.heroImg];
+    // Validate required fields
+    const requiredFields = [
+      "heroHeader",
+      "heroTitle1",
+      "heroTitle2",
+      "heroTitle3",
+      "targetUrl",
+    ];
+    const missingFields = requiredFields.filter((field) => !req.body[field]);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+      });
     }
 
-    const response = await axios.put(getHeroEndpoint(id), heroData);
-    res.json({
-      success: true,
-      data: response.data,
-      message: "Hero updated successfully",
-    });
-  } catch (error) {
-    if (error.response?.status === 404) {
+    const updateQuery = `
+      UPDATE hero
+      SET 
+        heroheader = $1,
+        herotitle1 = $2,
+        herotitle2 = $3,
+        herotitle3 = $4,
+        targeturl = $5
+      WHERE id = $6
+      RETURNING id, heroheader, herotitle1, herotitle2, herotitle3, targeturl, updated_at as heroimg_count
+    `;
+
+    const result = await client.query(updateQuery, [
+      heroHeader,
+      heroTitle1,
+      heroTitle2,
+      heroTitle3,
+      targetUrl,
+      id,
+    ]);
+
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Hero not found",
       });
     }
-    console.error("PUT hero error:", error.response?.data || error.message);
-    res.status(500).json({
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+      message: "Hero updated successfully",
+    });
+  } catch (error) {
+    console.error("PUT hero error:", error.message);
+    res.status(400).json({
       success: false,
       message: "Failed to update hero",
-      error: error.response?.data?.message || error.message,
+      error: error.message,
     });
+  } finally {
+    client.release();
   }
 });
 
 // DELETE /admin/hero/:id - Delete hero
-router.delete("/admin/hero/:id", express.json(), async (req, res) => {
+router.delete("/admin/hero/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    await axios.delete(getHeroEndpoint(id));
+    const result = await client.query(
+      "DELETE FROM hero WHERE id = $1 RETURNING id",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Hero not found",
+      });
+    }
+
     res.json({
       success: true,
       message: "Hero deleted successfully",
     });
   } catch (error) {
-    if (error.response?.status === 404) {
-      return res.status(404).json({
-        success: false,
-        message: "Hero not found",
-      });
-    }
-    console.error("DELETE hero error:", error.response?.data || error.message);
+    console.error("DELETE hero error:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to delete hero",
-      error: error.response?.data?.message || error.message,
+      error: error.message,
     });
+  } finally {
+    client.release();
   }
 });
 
