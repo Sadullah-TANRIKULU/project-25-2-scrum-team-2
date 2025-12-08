@@ -15,8 +15,8 @@ pool.on("error", (err) => {
   console.error("❌ Unexpected error on idle hero client", err);
 });
 
-// GET /admin/hero - Fetch all heroes
-router.get("/admin/hero", async (req, res) => {
+// GET /api/hero - Fetch all heroes
+router.get("/api/hero", async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query(`
@@ -50,8 +50,8 @@ router.get("/admin/hero", async (req, res) => {
   }
 });
 
-// GET /admin/hero/:id - Fetch single hero by ID
-router.get("/admin/hero/:id", async (req, res) => {
+// GET /api/hero/:id - Fetch single hero by ID
+router.get("/api/hero/:id", async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;

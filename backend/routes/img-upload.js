@@ -27,7 +27,7 @@ const uploadFields = upload.fields([
   { name: "gallery", maxCount: 8 },
 ]);
 
-router.post("/gallery", uploadFields, async (req, res, next) => {
+router.post("/admin/gallery", uploadFields, async (req, res, next) => {
   try {
     const { name } = req.body;
     const avatarBuffer = req.files?.avatar?.[0]?.buffer || null;
@@ -49,7 +49,7 @@ router.post("/gallery", uploadFields, async (req, res, next) => {
 });
 
 // POST /heroimg (unchanged, perfect with defaults)
-router.post("/heroimg/:id", upload.array("heroImg", 3), async (req, res) => {
+router.post("/admin/heroimg/:id", upload.array("heroImg", 3), async (req, res) => {
   const client = await pool.connect();
   try {
     const heroId = req.params.id;
@@ -76,8 +76,8 @@ router.post("/heroimg/:id", upload.array("heroImg", 3), async (req, res) => {
   }
 });
 
-// GET /heroimg/:id/:idx (fixed)
-router.get("/heroimg/:id/:idx", async (req, res) => {
+// GET /api/heroimg/:id/:idx (fixed)
+router.get("/api/heroimg/:id/:idx", async (req, res) => {
   const client = await pool.connect();
   try {
     const { id, idx } = req.params;
@@ -105,7 +105,7 @@ router.get("/heroimg/:id/:idx", async (req, res) => {
 });
 
 // Bonus: GET products (sizes only)
-router.get("/gallery", async (req, res) => {
+router.get("/api/gallery", async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT id, name, octet_length(avatar) as avatar_size, array_length(gallery,1) as gallery_count FROM gallery ORDER BY created_at DESC"
@@ -117,7 +117,7 @@ router.get("/gallery", async (req, res) => {
 });
 
 // New: Serve avatar image
-router.get("/gallery/:id/avatar", async (req, res) => {
+router.get("/api/gallery/:id/avatar", async (req, res) => {
   try {
     const { rows } = await pool.query(
       "SELECT avatar FROM gallery WHERE id = $1",
@@ -131,7 +131,7 @@ router.get("/gallery/:id/avatar", async (req, res) => {
 });
 
 // New: Serve gallery image by index
-router.get("/gallery/:id/gallery/:idx", async (req, res) => {
+router.get("/api/gallery/:id/gallery/:idx", async (req, res) => {
   try {
     const idx = parseInt(req.params.idx);
     if (isNaN(idx) || idx < 0)
