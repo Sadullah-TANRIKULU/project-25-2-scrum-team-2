@@ -5,7 +5,6 @@ const axios = require("axios");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 
-
 const app = express();
 app.use(cors());
 // app.use(express.static("public"));
@@ -110,7 +109,7 @@ const imgUploadRoutes = require("./routes/img-upload");
 app.use("/img-upload", imgUploadRoutes);
 
 const heroRoutes = require("./routes/hero");
-app.use("/", heroRoutes);
+app.use("/hero", heroRoutes);
 
 const checkoutRoutes = require("./routes/checkout");
 app.use("/api/checkout", checkoutRoutes);

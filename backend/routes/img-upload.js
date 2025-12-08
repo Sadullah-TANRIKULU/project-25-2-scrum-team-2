@@ -49,32 +49,36 @@ router.post("/admin/gallery", uploadFields, async (req, res, next) => {
 });
 
 // POST /heroimg (unchanged, perfect with defaults)
-router.post("/admin/heroimg/:id", upload.array("heroImg", 3), async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const heroId = req.params.id;
-    if (!heroId) {
-      return res.status(400).json({ error: "heroId is required" });
-    }
+router.post(
+  "/admin/heroimg/:id",
+  upload.array("heroImg", 3),
+  async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const heroId = req.params.id;
+      if (!heroId) {
+        return res.status(400).json({ error: "heroId is required" });
+      }
 
-    const heroimg = (req.files || []).map((f) => f.buffer);
-    const query = `
+      const heroimg = (req.files || []).map((f) => f.buffer);
+      const query = `
       UPDATE hero
       SET heroimg = $1, updated_at = NOW()
       WHERE id = $2
       RETURNING id, heroHeader, heroTitle1, heroTitle2, heroTitle3, targetUrl, array_length(heroimg, 1) as heroimg_count, updated_at
     `;
-    const result = await client.query(query, [heroimg, heroId]);
-    res.json({ success: true, hero: result.rows[0] });
-  } catch (error) {
-    console.error(error);
-    if (error.code === "LIMIT_FILE_SIZE")
-      return res.status(400).json({ error: "File >8MB" });
-    res.status(500).json({ error: error.message });
-  } finally {
-    client.release();
+      const result = await client.query(query, [heroimg, heroId]);
+      res.json({ success: true, hero: result.rows[0] });
+    } catch (error) {
+      console.error(error);
+      if (error.code === "LIMIT_FILE_SIZE")
+        return res.status(400).json({ error: "File >8MB" });
+      res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
   }
-});
+);
 
 // GET /api/heroimg/:id/:idx (fixed)
 router.get("/api/heroimg/:id/:idx", async (req, res) => {
