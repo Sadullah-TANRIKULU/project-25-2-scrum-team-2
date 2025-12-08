@@ -107,7 +107,7 @@ function requireAdmin(req, res, next) {
 app.use("/admin", requireAdmin);
 
 const imgUploadRoutes = require("./routes/img-upload");
-app.use("/admin/img-upload", imgUploadRoutes);
+app.use("/img-upload", imgUploadRoutes);
 
 const heroRoutes = require("./routes/hero");
 app.use("/", heroRoutes);
