@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const { Pool } = require("pg");
+const bcrypt = require("bcrypt");
+
 
 const app = express();
 app.use(cors());
@@ -30,6 +32,79 @@ app.use(
     cookie: { secure: false }, // Set to true if using HTTPS
   })
 );
+
+// --- ADMIN AUTH ROUTES ---
+
+// POST /admin/login  { email, password }
+app.post("/admin/login", express.json(), async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      "SELECT id, email, password_hash, role FROM admins WHERE email = $1",
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const admin = result.rows[0];
+
+    const matches = await bcrypt.compare(password, admin.password_hash);
+    if (!matches) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Store minimal info in session
+    req.session.admin = {
+      id: admin.id,
+      email: admin.email,
+      role: admin.role || "admin",
+    };
+
+    res.json({
+      message: "Logged in",
+      admin: { id: admin.id, email: admin.email, role: admin.role },
+    });
+  } catch (err) {
+    console.error("Admin login error:", err);
+    res.status(500).json({ error: "Login failed" });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /admin/logout
+app.post("/admin/logout", (req, res) => {
+  req.session.admin = null;
+  req.session.destroy(() => {
+    res.json({ message: "Logged out" });
+  });
+});
+
+// GET /admin/me  → check current session
+app.get("/admin/me", (req, res) => {
+  if (!req.session.admin) {
+    return res.status(401).json({ authenticated: false });
+  }
+  res.json({ authenticated: true, admin: req.session.admin });
+});
+// --- END ADMIN AUTH ROUTES ---
+
+function requireAdmin(req, res, next) {
+  if (req.session && req.session.admin) {
+    return next();
+  }
+  return res.status(401).json({ error: "Admin login required" });
+}
+
+app.use("/admin", requireAdmin);
 
 const imgUploadRoutes = require("./routes/img-upload");
 app.use("/admin/img-upload", imgUploadRoutes);
@@ -322,7 +397,6 @@ app.get("/api/cart", (req, res) => {
 app.post("/api/cart/add", async (req, res) => {
   const { productId, quantity = 1 } = req.body;
   console.log("productId", productId, "   ", "quantity", quantity);
-  
 
   try {
     const client = await pool.connect();
@@ -340,7 +414,7 @@ app.post("/api/cart/add", async (req, res) => {
     req.session.cart = req.session.cart || [];
 
     // Update or add item
-    const existing = req.session.cart.find((i) => i.id === productId);
+    const existing = req.session.cart.find((i) => i.id == productId);
     if (existing) {
       existing.quantity += quantity;
     } else {

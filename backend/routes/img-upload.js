@@ -49,16 +49,22 @@ router.post("/gallery", uploadFields, async (req, res, next) => {
 });
 
 // POST /heroimg (unchanged, perfect with defaults)
-router.post("/heroimg", upload.array("heroImg", 3), async (req, res) => {
+router.post("/heroimg/:id", upload.array("heroImg", 3), async (req, res) => {
   const client = await pool.connect();
   try {
+    const heroId = req.params.id;
+    if (!heroId) {
+      return res.status(400).json({ error: "heroId is required" });
+    }
+
     const heroimg = (req.files || []).map((f) => f.buffer);
     const query = `
-      INSERT INTO hero (heroimg)
-      VALUES ($1)
-      RETURNING id, array_length(heroimg, 1) as heroimg_count, created_at
+      UPDATE hero
+      SET heroimg = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING id, heroHeader, heroTitle1, heroTitle2, heroTitle3, targetUrl, array_length(heroimg, 1) as heroimg_count, updated_at
     `;
-    const result = await client.query(query, [heroimg]);
+    const result = await client.query(query, [heroimg, heroId]);
     res.json({ success: true, hero: result.rows[0] });
   } catch (error) {
     console.error(error);
