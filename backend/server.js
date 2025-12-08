@@ -118,7 +118,7 @@ app.use("/api/checkout", checkoutRoutes);
 app.use(express.json()); // For cart/product APIs
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/admin/products", express.json(), async (req, res) => {
+app.get("/api/products", express.json(), async (req, res) => {
   try {
     const client = await pool.connect();
 
