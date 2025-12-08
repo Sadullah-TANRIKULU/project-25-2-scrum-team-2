@@ -226,7 +226,7 @@ app.get("/api/products", express.json(), async (req, res) => {
 });
 
 // Get single product by id
-app.get("/admin/products/:id", async (req, res) => {
+app.get("/api/products/:id", async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query("SELECT * FROM products WHERE id = $1", [
