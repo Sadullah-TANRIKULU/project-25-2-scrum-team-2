@@ -135,18 +135,33 @@ router.get("/api/gallery/by-product/:productId/avatar", async (req, res) => {
   }
 });
 
-// New: Serve gallery image by index
-router.get("/api/gallery/:id/gallery/:idx", async (req, res) => {
+// New: Serve gallery image by index for a given product_id
+router.get("/api/gallery/by-product/:productId/:idx", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    if (isNaN(idx) || idx < 0)
+    const idx = parseInt(req.params.idx, 8);
+    if (isNaN(idx) || idx < 0) {
       return res.status(404).json({ error: "Invalid index" });
+    }
+
     const { rows } = await pool.query(
-      `SELECT img FROM (SELECT unnest(gallery) AS img FROM gallery WHERE id = $1) t OFFSET $2 LIMIT 1`,
-      [req.params.id, idx]
+      `
+      SELECT img
+      FROM (
+        SELECT unnest(gallery) AS img
+        FROM gallery
+        WHERE product_id = $1
+        ORDER BY created_at DESC
+      ) t
+      OFFSET $2
+      LIMIT 1
+      `,
+      [req.params.productId, idx]
     );
-    if (!rows[0]?.img)
+
+    if (!rows[0]?.img) {
       return res.status(404).json({ error: "No gallery image" });
+    }
+
     res.type("image/jpeg").send(rows[0].img);
   } catch (error) {
     res.status(500).json({ error: error.message });
