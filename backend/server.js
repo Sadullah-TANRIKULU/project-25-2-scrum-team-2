@@ -6,8 +6,20 @@ const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 
 const app = express();
-app.use(cors());
 // app.use(express.static("public"));
+
+app.use(
+  cors({
+    origin: [
+      "http://127.0.0.1:5500",
+      "http://localhost:5500",
+      "https://nima-schmuck-test.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+  })
+);
+
 const PORT = process.env.PORT || 3000;
 
 const connectionString = process.env.PG_CONNECTION_STRING;
