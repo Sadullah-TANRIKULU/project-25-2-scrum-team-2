@@ -181,7 +181,7 @@ router.put("/admin/hero/:id", express.json(), async (req, res) => {
         herotitle3 = $4,
         targeturl = $5
       WHERE id = $6
-      RETURNING id, heroheader, herotitle1, herotitle2, herotitle3, targeturl, updated_at as heroimg_count
+      RETURNING id, heroheader, herotitle1, herotitle2, herotitle3, targeturl, updated_at, array_length(heroimg, 1) as heroimg_count
     `;
 
     const result = await client.query(updateQuery, [
