@@ -103,7 +103,7 @@ function requireAdmin(req, res, next) {
   return res.status(401).json({ error: "Admin login required" });
 }
 
-// app.use("/admin", requireAdmin);
+app.use("/admin", requireAdmin);
 
 const imgUploadRoutes = require("./routes/img-upload");
 app.use("/img-upload", imgUploadRoutes);
