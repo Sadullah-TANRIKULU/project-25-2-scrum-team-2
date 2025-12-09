@@ -29,15 +29,15 @@ const uploadFields = upload.fields([
 
 router.post("/admin/gallery", uploadFields, async (req, res, next) => {
   try {
-    const { name } = req.body;
+    const { productId } = req.body;
     const avatarBuffer = req.files?.avatar?.[0]?.buffer || null;
     const galleryBuffers = req.files?.gallery?.map((f) => f.buffer) || [];
 
     const query = `
-      INSERT INTO gallery (name, avatar, gallery) VALUES ($1, $2, $3)
-      RETURNING id, name, created_at
+      INSERT INTO gallery (product_id, avatar, gallery) VALUES ($1, $2, $3)
+      RETURNING id, product_id, created_at
     `;
-    const values = [name || "Unnamed", avatarBuffer, galleryBuffers];
+    const values = [Number(productId), avatarBuffer, galleryBuffers];
     const result = await pool.query(query, values);
     res.json({ success: true, product: result.rows[0] });
   } catch (error) {
@@ -109,10 +109,11 @@ router.get("/api/heroimg/:id/:idx", async (req, res) => {
 });
 
 // Bonus: GET products (sizes only)
-router.get("/api/gallery", async (req, res) => {
+router.get("/api/gallery/by-product/:productId", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, name, octet_length(avatar) as avatar_size, array_length(gallery,1) as gallery_count FROM gallery ORDER BY created_at DESC"
+      "SELECT id, product_id, octet_length(avatar) AS avatar_size, array_length(gallery,1) AS gallery_count FROM gallery WHERE product_id = $1 ORDER BY created_at DESC",
+      [req.params.productId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -121,11 +122,11 @@ router.get("/api/gallery", async (req, res) => {
 });
 
 // New: Serve avatar image
-router.get("/api/gallery/:id/avatar", async (req, res) => {
+router.get("/api/gallery/by-product/:productId/avatar", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT avatar FROM gallery WHERE id = $1",
-      [req.params.id]
+      "SELECT avatar FROM gallery WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [req.params.productId]
     );
     if (!rows[0]?.avatar) return res.status(404).json({ error: "No avatar" });
     res.type("image/jpeg").send(rows[0].avatar);
