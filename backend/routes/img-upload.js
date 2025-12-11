@@ -51,7 +51,7 @@ router.post("/admin/gallery", uploadFields, async (req, res, next) => {
 // POST /heroimg (unchanged, perfect with defaults)
 router.post(
   "/admin/heroimg/:id",
-  upload.array("heroImg", 3),
+  upload.array("heroimg", 3),
   async (req, res) => {
     const client = await pool.connect();
     try {
