@@ -7,6 +7,8 @@ const bcrypt = require("bcrypt");
 const app = express();
 // app.use(express.static("public"));
 
+app.set('trust proxy', 1);
+
 app.use(
   cors({
     origin: [
