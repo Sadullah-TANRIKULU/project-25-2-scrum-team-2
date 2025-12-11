@@ -27,14 +27,14 @@ const uploadFields = upload.fields([
   { name: "gallery", maxCount: 8 },
 ]);
 
-router.post("/admin/gallery", uploadFields, async (req, res, next) => {
+router.post("/admin/gallery/:productId", uploadFields, async (req, res, next) => {
   try {
-    const { productId } = req.body;
+    const { productId } = req.params;
     const avatarBuffer = req.files?.avatar?.[0]?.buffer || null;
     const galleryBuffers = req.files?.gallery?.map((f) => f.buffer) || [];
 
     const query = `
-      INSERT INTO gallery (product_id, avatar, gallery) VALUES ($1, $2, $3)
+      UPDATE gallery SET product_id = $1, avatar = $2, gallery = $3, created_at = NOW()
       RETURNING id, product_id, created_at
     `;
     const values = [Number(productId), avatarBuffer, galleryBuffers];

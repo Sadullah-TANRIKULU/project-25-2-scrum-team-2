@@ -1,7 +1,6 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const axios = require("axios");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 
@@ -42,7 +41,7 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: true }, // Set to true if using HTTPS
+    cookie: { secure: true, maxAge: 1000 * 60 * 60 * 3 }, // Set to true if using HTTPS
   })
 );
 
