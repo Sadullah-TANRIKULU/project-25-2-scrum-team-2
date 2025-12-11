@@ -14,7 +14,7 @@ app.use(
       "http://localhost:5500",
       "https://nima-schmuck-test.vercel.app",
       "http://localhost:3000",
-      "http://127.0.0.1:3000"
+      "http://127.0.0.1:3000",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
@@ -116,7 +116,7 @@ function requireAdmin(req, res, next) {
   return res.status(401).json({ error: "Admin login required" });
 }
 
-// app.use("/admin", requireAdmin);
+app.use("/admin", requireAdmin);
 
 const imgUploadRoutes = require("./routes/img-upload");
 app.use("/img-upload", imgUploadRoutes);
