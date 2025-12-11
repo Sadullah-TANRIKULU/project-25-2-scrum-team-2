@@ -7,7 +7,7 @@ const bcrypt = require("bcrypt");
 const app = express();
 // app.use(express.static("public"));
 
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
 app.use(
   cors({
@@ -410,7 +410,16 @@ app.get("/api/cart", (req, res) => {
 
 app.post("/api/cart/add", async (req, res) => {
   const { productId, quantity = 1 } = req.body;
-  console.log("productId", productId, "   ", "quantity", quantity);
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return res
+      .status(400)
+      .json({ error: "Quantity must be a positive integer" });
+  }
+  const MAX_QTY = 99;
+  if (quantity > MAX_QTY) {
+    quantity = MAX_QTY;
+  }
 
   try {
     const client = await pool.connect();
@@ -430,7 +439,7 @@ app.post("/api/cart/add", async (req, res) => {
     // Update or add item
     const existing = req.session.cart.find((i) => i.id == productId);
     if (existing) {
-      existing.quantity += quantity;
+      existing.quantity = Math.min(existing.quantity + quantity, MAX_QTY);
     } else {
       req.session.cart.push({ ...item, quantity });
     }
