@@ -27,7 +27,7 @@ const uploadFields = upload.fields([
   { name: "gallery", maxCount: 8 },
 ]);
 
-router.post("/admin/gallery/img-upload/by-product/:productId", uploadFields, async (req, res, next) => {
+router.post("/admin/img-upload/gallery/by-product/:productId", uploadFields, async (req, res, next) => {
   try {
     const { productId } = req.params;
     const avatarBuffer = req.files?.avatar?.[0]?.buffer || null;
